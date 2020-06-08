@@ -36,5 +36,3 @@ example:
 ```
 
 The output will be a fetaure files & some environment files in configs folder that you can import into automation-starter.
-
-[wiki page](https://wiki.cvent.com/display/QE/Ready-Api+to+karate+script+converter)
