@@ -1,0 +1,38 @@
+{
+    "name": "@cvent/readyapi-karate-api-converter",
+    "version": "1.0.2",
+    "description": "readyapi-karate-api-converter",
+    "main": "karate_converter.js",
+    "scripts": {
+        "convert": "node karate_converter.js",
+        "lint": "eslint . --fix",
+        "lint:fix": "prettier ./* --write"
+    },
+    "author": "<Cvent @saurabh.mishra/@premashishm >",
+    "license": "UNLICENSED",
+    "publishConfig": {
+        "registry": "http://nexus.core.cvent.org:8081/nexus/content/repositories/npm-local/"
+    },
+    "dependencies": {
+        "async": "^2.6.1",
+        "dom-parser": "^0.1.6",
+        "jsonpath": "^1.0.2",
+        "lodash": "^4.17.11",
+        "path": "^0.12.7",
+        "xml-js": "^1.6.11",
+        "xml2js": "^0.4.19",
+        "xmldom": "^0.1.27",
+        "xpath": "0.0.27"
+    },
+    "devDependencies": {
+        "eslint": "^6.8.0",
+        "eslint-config-airbnb-base": "^14.1.0",
+        "eslint-config-prettier": "^6.10.0",
+        "eslint-plugin-import": "^2.20.1",
+        "eslint-plugin-node": "^11.0.0",
+        "eslint-plugin-prettier": "^3.1.2",
+        "figlet": "^1.4.0",
+        "figlet-cli": "^0.1.1",
+        "prettier": "^1.19.1"
+    }
+}
