@@ -921,7 +921,7 @@ function convertTestStepToRequest(testStep, cb) {
             testTypeLabel +
             ')';
         let prePayLoaddata =
-            "* def DbUtils = Java.type('com.cvent.automation.common.java.DBUtils')\n";
+            "* def DbUtils = Java.type('com.automation.common.java.DBUtils')\n";
         prePayLoaddata = prePayLoaddata + '* def db = new DbUtils(dbConfig)\n';
         const postPayloadData =
             '\n* def ' +
