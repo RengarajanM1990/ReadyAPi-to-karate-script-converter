@@ -1,5 +1,5 @@
 {
-    "name": "@cvent/readyapi-karate-api-converter",
+    "name": "@readyapi-karate-api-converter",
     "version": "1.0.2",
     "description": "readyapi-karate-api-converter",
     "main": "karate_converter.js",
@@ -8,11 +8,8 @@
         "lint": "eslint . --fix",
         "lint:fix": "prettier ./* --write"
     },
-    "author": "<Cvent @saurabh.mishra/@premashishm >",
+    "author": "<@saurabh1mishra >",
     "license": "UNLICENSED",
-    "publishConfig": {
-        "registry": "http://nexus.core.cvent.org:8081/nexus/content/repositories/npm-local/"
-    },
     "dependencies": {
         "async": "^2.6.1",
         "dom-parser": "^0.1.6",

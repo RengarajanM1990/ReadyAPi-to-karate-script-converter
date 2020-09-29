@@ -35,4 +35,4 @@ example:
 
 ```
 
-The output will be a fetaure files & some environment files in configs folder that you can import into automation-starter.
+The output will be a fetaure files & some environment files in configs folder.

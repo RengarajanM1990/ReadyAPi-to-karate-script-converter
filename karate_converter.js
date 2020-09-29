@@ -54,9 +54,7 @@ function getRequestTemplate(service, path, method, restRequest, cb) {
     }
     // there is an issue where the folder name is being converted to standard url syntax of https://
     // which is causing the folder to not be found
-    if (service.startsWith('https://')) {
-        service = service.replace('https://', 'https%3A%2F%2F');
-    }
+    service = unifyService(service);
     const filePath = getParentFolderPath(process.env.pathToProject, service);
     fs.readdir(filePath, (err, allFileList) => {
         if (err) {
@@ -126,6 +124,23 @@ function getRequestTemplate(service, path, method, restRequest, cb) {
             }
         );
     });
+}
+
+function unifyService(service) {
+    if (service.startsWith('https://')) {
+        service = service
+            .replace('https://', 'https%3A%2F%2F')
+            .replace(/:/g, '%3A')
+            .replace(/\//g, '%2F')
+            .replace(/\s+/g, '-');
+    } else if (service.startsWith('http://')) {
+        service = service
+            .replace('http://', 'http%3A%2F%2F')
+            .replace(/:/g, '%3A')
+            .replace(/\//g, '%2F')
+            .replace(/\s+/g, '-');
+    }
+    return service;
 }
 
 //
@@ -247,7 +262,7 @@ function setPathVariablesInString(str) {
         if (match.endsWith('/')) {
             retVal += '/';
         }
-        return retVal;
+        return retVal.replace(/\n+/g, '\n');
     }
 
     let test = str
@@ -274,6 +289,7 @@ function varDotReplacer(match, inParam) {
         ')'
     );
 }
+
 function varReplacerInsql(match, inParam) {
     return '\'"+' + inParam.replace(/\s+/g, '_') + '+"\'';
 }
@@ -422,7 +438,9 @@ function setAssertions(request, testStep) {
                     'configuration.0.scriptText.0'
                 );
                 scriptTestName +=
-                    '* def groovyAssertion =\n """\n ' + scriptText + ' \n"""';
+                    '* def groovyAssertion =\n """\n ' +
+                    scriptText +
+                    ' \n"""\n';
             } else if (assertionType === 'MessageContentAssertion') {
                 /* let assertionType = _.get(
                     assertion,
@@ -543,7 +561,7 @@ function convertTestStepToRequest(testStep, cb) {
         // basic data
         let name = handleName(_.get(testStep, '$.name'));
 
-        var service = _.get(testStep, 'config.0.$.service');
+        var service = unifyService(_.get(testStep, 'config.0.$.service'));
         var path = _.get(testStep, 'config.0.$.resourcePath');
         var method = _.get(testStep, 'config.0.$.methodName');
         var restRequest = _.get(testStep, 'config.0.restRequest.0');
@@ -557,6 +575,17 @@ function convertTestStepToRequest(testStep, cb) {
                 '     method = ' +
                 method
         );
+        if (!servicesMap[service + '||' + path]) {
+            console.error(
+                'for testStep' +
+                    name +
+                    '  service map entry for key {' +
+                    service +
+                    '||' +
+                    path +
+                    '} is undefine'
+            );
+        }
         console.log('Smap entry', servicesMap[service + '||' + path]);
 
         getRequestTemplate(
@@ -573,7 +602,8 @@ function convertTestStepToRequest(testStep, cb) {
                     data,
                     'resource.method.parameters.0.parameter',
                     []
-                ) // method-specific params
+                ) // method-specific params.
+                    .concat(_.get(data, 'resource.parameters.0.parameter', []))
                     .concat(_.get(data, 'parameters.0.parameter', []))
                     .concat(_.get(restRequest, 'parameters.0.entry')); // resource-specific params
                 const headers = [];
@@ -582,26 +612,36 @@ function convertTestStepToRequest(testStep, cb) {
                 let thisStyle;
 
                 _.each(parameters, p => {
-                    thisStyle = _.get(p.style, '0');
-                    if (thisStyle === 'HEADER') headers.push(p);
-                    else if (thisStyle === 'TEMPLATE') pathVars.push(p);
-                    else if (thisStyle === 'QUERY') queryParams.push(p);
-                    else {
-                        console.log('Unknown param style', thisStyle);
+                    if (p) {
+                        thisStyle = _.get(p.style, '0');
+                        if (thisStyle === 'HEADER') headers.push(p);
+                        else if (thisStyle === 'TEMPLATE') pathVars.push(p);
+                        else if (thisStyle === 'QUERY') queryParams.push(p);
+                        else {
+                            console.log('Unknown param style', thisStyle);
+                        }
+                    } else {
+                        console.error('Undefined parameters', p);
                     }
                 });
 
                 var restValueshashmap = _.fromPairs(
-                    restHeader.map(function(item) {
-                        return [item.$.key, item.$.value];
-                    })
+                    restHeader
+                        ? restHeader.map(function(item) {
+                              return [item.$.key, item.$.value];
+                          })
+                        : console.error('Undefined restValues', restHeader)
                 );
 
                 let baseUrlForEnv = setVariablesInParmas(
                     _.get(
                         restRequest,
                         'endpoint.0',
-                        params.service.replace(/\s+/g, '_')
+                        _.get(
+                            data,
+                            'resource.method.request.0.endpoint.0',
+                            params.service.replace(/\s+/g, '_')
+                        )
                     )
                 )
                     .replace(/#\(/g, '')
@@ -618,7 +658,7 @@ function convertTestStepToRequest(testStep, cb) {
                         : '') +
                     '\n' +
                     getQueryParams(queryParams, restValueshashmap);
-                url = setPathVariablesInString(url);
+                url = setPathVariablesInString(url).replace(/\n+/g, '\n');
 
                 let pathParamsArray = [];
                 let pvKey;
@@ -779,7 +819,7 @@ function convertTestStepToRequest(testStep, cb) {
                             url +
                             '\n' +
                             'And request' +
-                            " = read('" +
+                            " read('" +
                             bluecumberResourcePath +
                             "')" +
                             '\n' +
@@ -881,16 +921,12 @@ function convertTestStepToRequest(testStep, cb) {
             testTypeLabel +
             ')';
         let prePayLoaddata =
-            'Given url dburl \n' + "Given path  '/db-query/v1/db/query'";
-        prePayLoaddata =
-            prePayLoaddata +
-            '\nAnd header Authorization =  dbauth \nAnd header Content-Type = "application/json"\n';
+            "* def DbUtils = Java.type('com.cvent.automation.common.java.DBUtils')\n";
+        prePayLoaddata = prePayLoaddata + '* def db = new DbUtils(dbConfig)\n';
         const postPayloadData =
-            'When method post\n' +
-            'Then status 200\n' +
-            '* def ' +
+            '\n* def ' +
             _.get(testStep, '$.name').replace(/\s+/g, '_') +
-            ' = response\n';
+            ' = db.readRows(query)\n';
         let request = '';
         var queryString = [];
         queryString = setVariablesInSQLString(
@@ -907,8 +943,7 @@ function convertTestStepToRequest(testStep, cb) {
                 prePayLoaddata +
                 '* def query = "' +
                 queryString[0] +
-                '"\n' +
-                'And request {"user":"#(dbuser)","password": "#(dbpassword)","url": "#(jdbc)","query": "#(query)"}\n' +
+                '"' +
                 postPayloadData;
         } else {
             for (var counter = 0; counter < queryString.length; counter++) {
@@ -919,8 +954,7 @@ function convertTestStepToRequest(testStep, cb) {
                         prePayLoaddata +
                         '* def query = "' +
                         (queryString[counter] ? queryString[counter] : "''") +
-                        '"\n' +
-                        'And request {"user":"#(dbuser)","password": "#(dbpassword)","url": "#(jdbc)","query": "#(query)"}\n' +
+                        '"' +
                         postPayloadData;
                 }
             }
@@ -1262,12 +1296,30 @@ function startProcessingServices(cb) {
     }
     var serviceName = topNode.$.service;
     var path = topNode.$.path;
+    let parentParamObj = Object.assign(
+        _.get(topNode, 'method.0.parameters.0', []),
+        _.get(topNode, 'parameters.0', [])
+    );
 
     // console.log('Adding to smap: ' + serviceName + '||' + path);
     servicesMap[serviceName + '||' + path] = _.omit(topNode, 'resource');
 
     _.each(topNode.resource, r => {
         r.$.service = serviceName;
+        r.$.path =
+            path.endsWith('/') || r.$.path.startsWith('/')
+                ? path + r.$.path
+                : path + '/' + r.$.path;
+
+        _.set(
+            r,
+            'parameters.0',
+            Object.assign(
+                _.get(r, 'method.0.parameters.0', []),
+                _.get(r, 'parameters.0', []),
+                parentParamObj
+            )
+        );
         serviceStack.push(r);
     });
 
@@ -1308,8 +1360,12 @@ function parseProject(pathToProject, testSuiteName) {
                                 return cb();
                             }
                             (function(cb, pathToProject, item) {
+                                let resolvedPath = checkFilePath(
+                                    pathToProject,
+                                    item
+                                );
                                 getXmlNodeFromFilePath(
-                                    pathToProject + item.replace(/\\/g, '/'),
+                                    resolvedPath.replace(/\\/g, '/'),
                                     (err, node) => {
                                         if (err) {
                                             console.log(
@@ -1464,39 +1520,34 @@ function parseProject(pathToProject, testSuiteName) {
                                                             '/karate-config-' +
                                                             env.$.name +
                                                             '.js';
-                                                        const dburl =
-                                                            process.env.dburl ||
-                                                            'https://db-query-service-dev.us-east-1.lb.core.cvent.org/staging';
-                                                        let dbuser =
+                                                        const userName =
                                                             process.env
-                                                                .dbuser ||
-                                                            'qtpman';
-                                                        let dbpassword =
+                                                                .userName ||
+                                                            'dummy userName';
+                                                        let password =
                                                             process.env
-                                                                .dbpassword ||
-                                                            'T3stCv3nT';
-                                                        let jdbc =
-                                                            process.env.jdbc ||
-                                                            'jdbc:sqlserver://ap20-dba-408.core.cvent.org:50001;databaseName=CVENT_PROD';
-                                                        let dbauth =
+                                                                .password ||
+                                                            'dummy password';
+                                                        let url =
+                                                            process.env.url ||
+                                                            'dummy url';
+                                                        let driverClassName =
                                                             process.env
-                                                                .dbauth ||
-                                                            'api_key 9689eb105ae014a868e2133610e21403';
+                                                                .driverClassName ||
+                                                            'dummy driverClassName';
                                                         const finalFileData =
                                                             'function() {\n' +
                                                             '  var env = karate.env;\n' +
                                                             '' +
                                                             '  var config = {\n' +
-                                                            `'dburl': '${dburl}'` +
+                                                            `'dbConfig': '{ username : ${userName}'` +
                                                             ',\n' +
-                                                            `'dbuser': '${dbuser}'` +
+                                                            `password: '${password}'` +
                                                             ',\n' +
-                                                            `'dbpassword': '${dbpassword}'` +
+                                                            `url: '${url}'` +
                                                             ',\n' +
-                                                            `'jdbc': '${jdbc}'` +
-                                                            ',\n' +
-                                                            `'dbauth': '${dbauth}'` +
-                                                            ',\n' +
+                                                            `'driverClassName': '${driverClassName}'` +
+                                                            '\n}\n' +
                                                             filedata +
                                                             '};\n' +
                                                             configfunc +
@@ -1536,12 +1587,22 @@ function parseProject(pathToProject, testSuiteName) {
     });
 }
 
+function checkFilePath(pathToProject, item) {
+    let items = item.split(/\\/g);
+    for (let i = 0; i < items.length; i++) {
+        fs.readdirSync(pathToProject).forEach(file => {
+            if (items[i].toUpperCase() === file.toUpperCase()) {
+                items[i] = file;
+            }
+        });
+        pathToProject = path.join(pathToProject, items[i]);
+    }
+    return pathToProject;
+}
+
 module.exports = parseProject;
-parseProject(
-    '/Users/Saurabh.Mishra/cvent.git/api-scripts/scripts/csn/esQueryService/',
-    'elasticsearchQueryService'
-);
 /*parseProject(
-    '/Users/Saurabh.Mishra/cvent.git/readyapi-scripts-karate-testing/scripts/events/inviteeSearch/',
-    'Search-Results'
+    'testProjectPath',
+    'testSuiteName',
 );*/
+
